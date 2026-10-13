@@ -398,6 +398,29 @@
   }
   document.getElementById('btnReset').addEventListener('click', resetSwing);
 
+  // ============================================================
+  //  🛡️ 防呆保险：启动期自检，捕获"函数未定义 / DOM 缺失"类错误
+  //  （这条本身不修任何 bug，只是把"白屏"变成"控制台红字提示"）
+  // ============================================================
+  (function selfCheck() {
+    const required = [
+      ['#btnReset',     '重置按钮'],
+      ['#rL',           '摆长滑块'], ['#rG', '重力滑块'], ['#rD', '阻尼滑块'],
+      ['#stage',        '画布'],
+    ];
+    const missing = required.filter(([sel]) => !document.querySelector(sel));
+    if (missing.length) console.error('❌ 缺少 DOM 元素:', missing);
+
+    // 函数存在性自检：直接对比函数引用是否定义
+    const requiredFns = { frame: typeof frame, theta: typeof theta, resetSwing: typeof resetSwing, bindRange: typeof bindRange };
+    const missingFns = Object.entries(requiredFns).filter(([, t]) => t !== 'function').map(([n]) => n);
+    if (missingFns.length) console.error('❌ 函数未定义:', missingFns);
+
+    if (!missing.length && !missingFns.length) {
+      console.log('✅ 启动期自检通过（' + required.length + ' 个元素 / ' + Object.keys(requiredFns).length + ' 个函数）');
+    }
+  })();
+
   window.addEventListener('keydown', e => {
     if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
   });

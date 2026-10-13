@@ -350,6 +350,20 @@
   window.addEventListener('keydown', e => {
     if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
   });
+
+  // ============================================================
+  //  🛡️ 启动期自检：把"白屏"变成"控制台红字提示"
+  //  防止 "onclick= 函数未定义" 这类作用域错误被静默吞掉
+  // ============================================================
+  (function selfCheck() {
+    const required = [['#btnReset','重置'],['#rL','摆长'],['#rG','重力'],['#rD','阻尼'],['#stage','画布']];
+    const missing = required.filter(([s]) => !document.querySelector(s));
+    if (missing.length) console.error('❌ 缺少 DOM:', missing);
+    const fns = { frame: typeof frame, theta: typeof theta, resetSwing: typeof resetSwing, bindRange: typeof bindRange };
+    const missFns = Object.entries(fns).filter(([,t]) => t !== 'function').map(([n]) => n);
+    if (missFns.length) console.error('❌ 函数未定义:', missFns);
+    if (!missing.length && !missFns.length) console.log('✅ 自检通过');
+  })();
 })();
 </script>
 </body>
