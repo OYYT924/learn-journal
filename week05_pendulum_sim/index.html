@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Week 05 · 单摆简谐振动模拟器 · 欧阳雨彤 7902126140</title>
 <style>
   html, body {
@@ -53,8 +54,67 @@
   }
   #panel button:hover { background: #353550; }
   #panel button:active { transform: scale(0.97); }
+
+  /* ---- 天体预设胶囊按钮 ---- */
+  #presets {
+    position: fixed; bottom: 112px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 10px;
+    z-index: 10;
+  }
+  .preset {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: rgba(20, 20, 30, 0.62);
+    color: #b8b8d0;
+    border: 1px solid rgba(120, 130, 200, 0.25);
+    font-size: 12px; font-family: inherit;
+    cursor: pointer; white-space: nowrap;
+    backdrop-filter: blur(10px);
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;   /* 消除触屏双击缩放延迟 */
+    transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  }
+  .preset:hover { background: rgba(42, 42, 58, 0.85); color: #e6e6f0; }
+  .preset .g-val {
+    font-size: 10px; opacity: 0.65;
+    font-variant-numeric: tabular-nums;
+  }
+  .preset.active {
+    background: rgba(127, 200, 255, 0.14);
+    border-color: #7fc8ff;
+    color: #7fc8ff;
+    box-shadow: 0 0 14px rgba(127, 200, 255, 0.28);
+  }
+  #panel input[type=range] { touch-action: manipulation; }
+
+  /* ---- 移动端 / 触屏设备适配（窄屏或粗指针） ---- */
+  @media (max-width: 760px), (pointer: coarse) {
+    #presets {
+      bottom: 158px; gap: 8px;
+      max-width: 96vw; flex-wrap: wrap; justify-content: center;
+    }
+    .preset { padding: 9px 14px; font-size: 13px; }
+    #panel {
+      flex-wrap: wrap; justify-content: center;
+      gap: 10px 14px; bottom: 12px;
+      width: min(94vw, 470px);
+      padding: 12px 14px; box-sizing: border-box;
+    }
+    .ctrl { min-width: 124px; }
+    #panel input[type=range] { width: 92px; }
+    #panel button { padding: 10px 14px; font-size: 13px; }
+    #hud {
+      top: 8px; left: 8px; right: 8px;
+      font-size: 11px; padding: 8px 10px; line-height: 1.6;
+    }
+    #hud h1 { font-size: 13px; }
+    #foot { display: none; }
+  }
   #foot {
-    position: fixed; bottom: 108px; left: 0; right: 0; text-align: center;
+    position: fixed; bottom: 158px; left: 0; right: 0; text-align: center;
     font-size: 11px; color: #5a5a78; letter-spacing: 1px;
   }
 </style>
@@ -65,9 +125,16 @@
   <div id="hud">
     <h1>🎯 单摆简谐振动模拟器</h1>
     实验者：<b>欧阳雨彤</b>　·　学号：<b>7902126140</b><br>
-    摆长 L = <b id="hudL">200</b> px　·　重力 g = <b>9.8</b> m/s²<br>
+    摆长 L = <b id="hudL">200</b> px　·　重力 g = <b id="hudG">9.8</b> m/s²（<b id="hudBody">地球</b>）<br>
     周期 T = <b id="hudT">—</b> s　·　角频率 ω = <b id="hudW">—</b> rad/s<br>
     当前摆角 θ = <b id="hudTheta">—</b>°　·　角速度 ω(t) = <b id="hudV">—</b> rad/s
+  </div>
+
+  <div id="presets">
+    <button class="preset" data-body="earth"   data-g="9.8">🌍 地球<span class="g-val">9.8</span></button>
+    <button class="preset" data-body="moon"    data-g="1.6">🌙 月球<span class="g-val">1.6</span></button>
+    <button class="preset" data-body="jupiter" data-g="24.8">🪐 木星<span class="g-val">24.8</span></button>
+    <button class="preset" data-body="space"   data-g="0.5">🚀 太空<span class="g-val">0.5</span></button>
   </div>
 
   <div id="panel">
@@ -81,7 +148,7 @@
     <div class="ctrl">
       <div class="ctrl-label">重力 g</div>
       <div class="ctrl-row">
-        <input type="range" id="rG" min="1" max="25" step="0.1" value="9.8">
+        <input type="range" id="rG" min="0.5" max="25" step="0.1" value="9.8">
         <span class="val" id="valG">9.8</span><span class="unit">m/s²</span>
       </div>
     </div>
@@ -129,6 +196,37 @@
     theta0: 45 * Math.PI / 180,  // 初始角 (rad)
     damping: 0, // 阻尼系数（每秒钟衰减比例，0=无阻尼）
   };
+
+  // ============================================================
+  //  天体预设 & 数据持久化（localStorage，全程 try/catch 保证 0 报错）
+  // ============================================================
+  const PRESETS = { earth: '地球', moon: '月球', jupiter: '木星', space: '太空' };
+  let currentPreset = 'earth';   // 当前天体场景（null = 用户自定义）
+
+  const STORE_KEY = 'pendulum-sim-config-v1';
+  // 探测当前环境是否可用 localStorage（file:// / 隐私模式可能被禁）
+  const storageOK = (() => {
+    try { const k = '__pendulum_probe__'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
+    catch (e) { return false; }
+  })();
+
+  function loadConfig() {
+    if (!storageOK) return null;
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); }
+    catch (e) { return null; }   // 缓存损坏时不报错，静默用默认值
+  }
+
+  function saveConfig(gOverride) {
+    if (!storageOK) return;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        L: physics.L,
+        g: (typeof gOverride === 'number' ? gOverride : physics.g),  // 过渡动画期间保存目标值
+        damping: physics.damping,
+        preset: currentPreset
+      }));
+    } catch (e) { /* 存储满/被禁用：静默降级，不影响模拟器运行 */ }
+  }
 
   // 角频率 ω = sqrt(g / L)  —— 视觉上 1px ≈ 0.01m，使周期更接近真实
   const PX_PER_M = 100;  // 1m = 100px 的视觉比例
@@ -272,8 +370,19 @@
   // ============================================================
   // 暂停状态（空格键切换）— 在主循环顶部判断以避免双 rAF
   let paused = false;
+  // 重力平滑过渡动画状态：{ from, to, start, dur }，null = 无动画进行中
+  let gTween = null;
 
   function frame(now) {
+    // 天体切换：重力平滑过渡（easeInOutCubic 缓动，900ms，暂停时也继续保证 UI 响应）
+    if (gTween) {
+      const p = Math.min(1, (now - gTween.start) / gTween.dur);
+      const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+      physics.g = gTween.from + (gTween.to - gTween.from) * e;
+      syncGWidget();
+      if (p >= 1) gTween = null;
+    }
+
     if (paused) {
       // 暂停时只刷新渲染、不推进时间
       lastT = now;
@@ -314,6 +423,8 @@
     document.getElementById('hudTheta').textContent = (th * 180 / Math.PI).toFixed(1);
     document.getElementById('hudV').textContent = thetaDot(t).toFixed(2);
     document.getElementById('hudL').textContent = physics.L.toFixed(0);
+    document.getElementById('hudG').textContent = physics.g.toFixed(1);
+    document.getElementById('hudBody').textContent = currentPreset ? PRESETS[currentPreset] : '自定义';
 
     requestAnimationFrame(frame);
   }
@@ -321,21 +432,67 @@
   requestAnimationFrame(frame);
 
   // ============================================================
-  //  UI 控件
+  //  UI 控件（滑块改动即保存；g 手动拖动会取消过渡并转为"自定义"）
   // ============================================================
-  // 滑块绑定：实时更新物理参数，不打断时间线（让球自然演化）
-  function bindRange(id, valId, key, fmt) {
+  function bindRange(id, valId, key, fmt, onInput) {
     const r = document.getElementById(id);
     const v = document.getElementById(valId);
     r.addEventListener('input', () => {
       const num = parseFloat(r.value);
       physics[key] = num;
       v.textContent = fmt(num);
+      if (typeof onInput === 'function') onInput(num);
     });
+    return { slider: r, label: v };
   }
-  bindRange('rL', 'valL', 'L', v => v.toFixed(0));
-  bindRange('rG', 'valG', 'g', v => v.toFixed(1));
-  bindRange('rD', 'valD', 'damping', v => v.toFixed(3));
+  const ctrlL = bindRange('rL', 'valL', 'L', v => v.toFixed(0), () => saveConfig());
+  const ctrlG = bindRange('rG', 'valG', 'g', v => v.toFixed(1), () => {
+    gTween = null;          // 手动拖动立即接管，取消进行中的过渡动画
+    currentPreset = null;   // g 被手工修改 → 场景转为"自定义"
+    markPreset();
+    saveConfig();
+  });
+  const ctrlD = bindRange('rD', 'valD', 'damping', v => v.toFixed(3), () => saveConfig());
+
+  // ---- 天体预设胶囊按钮：点击后重力平滑过渡 ----
+  const PRESET_BUTTONS = Array.from(document.querySelectorAll('.preset'));
+  function markPreset() {
+    PRESET_BUTTONS.forEach(b => b.classList.toggle('active', b.dataset.body === currentPreset));
+  }
+  function syncGWidget() {
+    ctrlG.slider.value = physics.g;
+    ctrlG.label.textContent = physics.g.toFixed(1);
+  }
+  PRESET_BUTTONS.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = parseFloat(btn.dataset.g);
+      currentPreset = btn.dataset.body;
+      markPreset();
+      // 从当前值平滑滑向目标重力（900ms 缓动）
+      gTween = { from: physics.g, to: target, start: performance.now(), dur: 900 };
+      saveConfig(target);   // 立即保存目标值（中途关页也能恢复到目的地）
+    });
+  });
+
+  // ---- 数据持久化：页面加载时恢复上次保存的参数 ----
+  (function restoreConfig() {
+    const cfg = loadConfig();
+    if (!cfg || typeof cfg !== 'object') { markPreset(); return; }
+    // 边界收敛：防止缓存值越界导致 NaN / 异常物理
+    const clamp = (v, lo, hi, dflt) =>
+      (typeof v === 'number' && isFinite(v)) ? Math.min(hi, Math.max(lo, v)) : dflt;
+    physics.L = clamp(cfg.L, 100, 350, physics.L);
+    physics.g = clamp(cfg.g, 0.5, 25, physics.g);
+    physics.damping = clamp(cfg.damping, 0, 0.010, physics.damping);
+    ctrlL.slider.value = physics.L;   ctrlL.label.textContent = physics.L.toFixed(0);
+    syncGWidget();
+    ctrlD.slider.value = physics.damping; ctrlD.label.textContent = physics.damping.toFixed(3);
+    currentPreset = (cfg.preset && PRESETS[cfg.preset]) ? cfg.preset : null;
+    markPreset();
+    console.log('💾 已恢复上次参数：L=' + physics.L.toFixed(0) + 'px · g=' + physics.g.toFixed(1) +
+      'm/s² · γ=' + physics.damping.toFixed(3) +
+      '（' + (currentPreset ? PRESETS[currentPreset] : '自定义') + '）');
+  })();
 
   // "重置摆动"：精准回到 45° 初始状态（t 归零 + 轨迹清空 + theta0 重置）
   function resetSwing() {
@@ -356,13 +513,18 @@
   //  防止 "onclick= 函数未定义" 这类作用域错误被静默吞掉
   // ============================================================
   (function selfCheck() {
-    const required = [['#btnReset','重置'],['#rL','摆长'],['#rG','重力'],['#rD','阻尼'],['#stage','画布']];
+    const required = [['#btnReset','重置'],['#rL','摆长'],['#rG','重力'],['#rD','阻尼'],['#stage','画布'],['#presets','天体预设栏'],['#hudG','HUD重力'],['#hudBody','HUD天体名']];
     const missing = required.filter(([s]) => !document.querySelector(s));
     if (missing.length) console.error('❌ 缺少 DOM:', missing);
-    const fns = { frame: typeof frame, theta: typeof theta, resetSwing: typeof resetSwing, bindRange: typeof bindRange };
+    const presetCount = document.querySelectorAll('.preset').length;
+    if (presetCount !== 4) console.error('❌ 天体预设按钮数量异常：' + presetCount + '（应为 4）');
+    const fns = { frame: typeof frame, theta: typeof theta, resetSwing: typeof resetSwing, bindRange: typeof bindRange, markPreset: typeof markPreset, syncGWidget: typeof syncGWidget, saveConfig: typeof saveConfig, loadConfig: typeof loadConfig };
     const missFns = Object.entries(fns).filter(([,t]) => t !== 'function').map(([n]) => n);
     if (missFns.length) console.error('❌ 函数未定义:', missFns);
-    if (!missing.length && !missFns.length) console.log('✅ 自检通过');
+    if (!missing.length && !missFns.length && presetCount === 4) {
+      console.log('✅ 自检通过 · 4 天体预设就绪 · 持久化' +
+        (storageOK ? '已启用（localStorage，刷新后参数自动恢复）' : '不可用（当前浏览器环境限制，参数不做本地保存）'));
+    }
   })();
 })();
 </script>
