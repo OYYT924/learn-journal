@@ -130,7 +130,7 @@
 <div class="layout">
   <!-- 左侧：可视化舞台 -->
   <div class="stage-side">
-    <div class="warn">🐛 <b>调试演练场</b>　本页面故意埋设 4 处 Bug　|　参考正确版本：<code>../index.html</code>　|　按 F12 打开控制台查看运行信息</div>
+    <div class="warn">🐛 <b>调试演练场</b>　本页面 4 处 Bug 已全部修复 ✅　|　参考正确版本：<code>../index.html</code>　|　按 F12 打开控制台查看运行信息</div>
     <canvas id="stage"></canvas>
     <div id="hud">
       <div>摆长 L = <b id="hudL">200</b> px　·　重力 g = <b id="hudG">9.8</b></div>
@@ -166,7 +166,7 @@
 
   <!-- 右侧：Bug 描述 + 源码 -->
   <div class="code-side">
-    <h2>🐞 本页 Bug 清单 <small>对照源码找出下述 4 处问题</small></h2>
+    <h2>✅ 本页 Bug 清单 <small>4 处问题已全部修复（下方说明保留供学习回顾）</small></h2>
 
     <div class="bug-card">
       <div class="bug-id">BUG #1 · 滑块绑定错位</div>
@@ -196,7 +196,7 @@
       <div class="bug-hint">💡 提示：<code>drawTrail()</code> 里循环变量 <code>i</code> 没被用上</div>
     </div>
 
-    <h2>📄 源码（带 Bug 标记）</h2>
+    <h2>📄 源码（修复前原始病灶记录）</h2>
 <pre class="source">
 <span class="line"><span class="kw">const</span> physics = {</span>
 <span class="line">  L: <span class="num">200</span>, g: <span class="num">9.8</span>,</span>
@@ -272,12 +272,14 @@
   const MAX_TRAIL = 240;
   let paused = false;
 
-  // 🐛 BUG #2: 阻尼被错误地加到了角频率
+  // ✅ BUG #2 已修复: 阻尼改为乘在指数衰减项 e^(-γt) 上，不再加进角频率
   function theta(t) {
-    return physics.theta0 * Math.cos((omega() + physics.damping) * t);
+    return physics.theta0 * Math.cos(omega() * t) * Math.exp(-physics.damping * t);
   }
   function thetaDot(t) {
-    return -physics.theta0 * Math.sin((omega() + physics.damping) * t) * (omega() + physics.damping);
+    // 求导：d/dt [θ₀·cos(ωt)·e^(-γt)] = -θ₀·e^(-γt)·(ω·sin(ωt) + γ·cos(ωt))
+    const decay = Math.exp(-physics.damping * t);
+    return -physics.theta0 * decay * (Math.sin(omega() * t) * omega() + physics.damping * Math.cos(omega() * t));
   }
 
   // 渲染辅助
@@ -321,12 +323,13 @@
     ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
   }
 
-  // 🐛 BUG #4: 轨迹颜色没用渐变
+  // ✅ BUG #4 已修复: 用 i/trail.length 算透明度，轨迹呈现"新亮旧淡"渐隐效果
   function drawTrail() {
     if (trail.length < 2) return;
     for (let i = 1; i < trail.length; i++) {
-      ctx.strokeStyle = `rgba(127, 200, 255, 0.35)`;  // 整条一个颜色
-      ctx.lineWidth = 1.5;
+      const a = i / trail.length;
+      ctx.strokeStyle = `rgba(127, 200, 255, ${a * 0.35})`;
+      ctx.lineWidth = 1.5 * a;
       ctx.beginPath();
       ctx.moveTo(trail[i-1].x, trail[i-1].y);
       ctx.lineTo(trail[i].x, trail[i].y);
@@ -356,9 +359,9 @@
     drawPivot(px, py);
     drawBallWithGlow(bx, by, ballR);
 
-    // HUD（额外加了"实测 vs 理论"差异指标，让 Bug #2 一眼可见）
+    // HUD（"实测 vs 理论"差异指标：BUG #2 修复后，阻尼只影响振幅，频率差恒为 0）
     const wTheo = omega();
-    const wActual = omega() + physics.damping;  // 受 Bug #2 影响：实测 = 理论 + 阻尼
+    const wActual = omega();
     const wDiff = wActual - wTheo;
     document.getElementById('hudT') && (document.getElementById('hudL').textContent = physics.L.toFixed(0));
     document.getElementById('hudG').textContent = physics.g.toFixed(1);
@@ -386,12 +389,13 @@
     });
   }
   bindRange('rL', 'valL', 'L', v => v.toFixed(0));
-  // 🐛 BUG #1: g 滑块错绑到 theta0
-  bindRange('rG', 'valG', 'theta0', v => v.toFixed(1));
+  // ✅ BUG #1 已修复: g 滑块正确绑定到 physics.g
+  bindRange('rG', 'valG', 'g', v => v.toFixed(1));
   bindRange('rD', 'valD', 'damping', v => v.toFixed(3));
 
-  // 🐛 BUG #3: 漏了把 theta0 重置回 45°
+  // ✅ BUG #3 已修复: 重置时把 theta0 也恢复回 45°
   function resetSwing() {
+    physics.theta0 = 45 * Math.PI / 180;
     t = 0;
     trail = [];
     lastT = performance.now();
@@ -430,7 +434,7 @@
     document.getElementById('answer-box').classList.toggle('show');
   });
 
-  console.log('🐛 调试演练场已加载。本页面故意埋设 4 处 Bug，请打开右侧代码面板对照找出。');
+  console.log('🐛 调试演练场：4 处 Bug 已全部修复 ✅ 试着把"阻尼 γ"拉到 0.010，看摆动慢慢衰减；拖动"重力 g"滑块，确认 θ₀ 不再乱跑。');
 })();
 </script>
 </body>
