@@ -26,26 +26,35 @@
   #hud b { color: #7fc8ff; font-weight: 600; }
   #hud h1 { margin: 0 0 8px; font-size: 15px; color: #e6e6f0; letter-spacing: 0.5px; }
   #panel {
-    position: fixed; top: 16px; right: 20px;
-    display: flex; flex-direction: column; gap: 8px;
-    background: rgba(20, 20, 30, 0.55);
-    padding: 12px 14px;
-    border: 1px solid rgba(120, 130, 200, 0.18);
-    border-radius: 8px;
-    backdrop-filter: blur(6px);
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: row; align-items: center; gap: 22px;
+    background: rgba(20, 20, 30, 0.62);
+    padding: 14px 22px;
+    border: 1px solid rgba(120, 130, 200, 0.20);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
-  #panel label { font-size: 12px; color: #b8b8d0; display: flex; align-items: center; gap: 8px; }
-  #panel input[type=range] { width: 160px; accent-color: #7fc8ff; }
-  #panel .val { color: #7fc8ff; font-variant-numeric: tabular-nums; min-width: 50px; text-align: right; }
+  .ctrl { display: flex; flex-direction: column; gap: 4px; min-width: 175px; }
+  .ctrl-label { font-size: 10px; color: #8a8aa8; letter-spacing: 1.5px; text-transform: uppercase; }
+  .ctrl-row { display: flex; align-items: center; gap: 8px; }
+  #panel input[type=range] { width: 135px; accent-color: #7fc8ff; }
+  #panel .val {
+    color: #7fc8ff; font-variant-numeric: tabular-nums;
+    min-width: 46px; text-align: right; font-size: 13px; font-weight: 600;
+  }
+  #panel .unit { font-size: 10px; color: #6a6a85; min-width: 24px; }
   #panel button {
-    margin-top: 6px;
-    padding: 6px 12px; background: #2a2a3a; color: #e6e6f0;
-    border: 1px solid #3a3a55; border-radius: 6px; cursor: pointer; font-size: 12px;
-    transition: background 0.15s;
+    padding: 8px 14px; background: #2a2a3a; color: #e6e6f0;
+    border: 1px solid #3a3a55; border-radius: 8px; cursor: pointer; font-size: 12px;
+    transition: background 0.15s, transform 0.1s;
+    white-space: nowrap;
   }
   #panel button:hover { background: #353550; }
+  #panel button:active { transform: scale(0.97); }
   #foot {
-    position: fixed; bottom: 12px; left: 0; right: 0; text-align: center;
+    position: fixed; bottom: 108px; left: 0; right: 0; text-align: center;
     font-size: 11px; color: #5a5a78; letter-spacing: 1px;
   }
 </style>
@@ -62,19 +71,28 @@
   </div>
 
   <div id="panel">
-    <label>摆长 L <span class="val" id="valL">200</span> px
-      <input type="range" id="rL" min="80" max="320" value="200">
-    </label>
-    <label>重力 g <span class="val" id="valG">9.8</span> m/s²
-      <input type="range" id="rG" min="1" max="20" step="0.1" value="9.8">
-    </label>
-    <label>初始角 θ₀ <span class="val" id="valA">45</span>°
-      <input type="range" id="rA" min="5" max="60" value="45">
-    </label>
-    <label>阻尼系数 <span class="val" id="valD">0.00</span>
-      <input type="range" id="rD" min="0" max="0.5" step="0.01" value="0">
-    </label>
-    <button id="btnReset">↻ 重置模拟</button>
+    <div class="ctrl">
+      <div class="ctrl-label">摆长 L</div>
+      <div class="ctrl-row">
+        <input type="range" id="rL" min="100" max="350" value="200">
+        <span class="val" id="valL">200</span><span class="unit">px</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-label">重力 g</div>
+      <div class="ctrl-row">
+        <input type="range" id="rG" min="1" max="25" step="0.1" value="9.8">
+        <span class="val" id="valG">9.8</span><span class="unit">m/s²</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-label">阻尼 γ</div>
+      <div class="ctrl-row">
+        <input type="range" id="rD" min="0" max="0.010" step="0.001" value="0">
+        <span class="val" id="valD">0.000</span>
+      </div>
+    </div>
+    <button id="btnReset">↻ 重置摆动 (45°)</button>
   </div>
 
   <div id="foot">南昌大学 · 食品科学与工程 · 7902126140 欧阳雨彤 · Week 05</div>
@@ -252,10 +270,18 @@
   // ============================================================
   //  主循环
   // ============================================================
+  // 暂停状态（空格键切换）— 在主循环顶部判断以避免双 rAF
+  let paused = false;
+
   function frame(now) {
-    const dt = Math.min((now - lastT) / 1000, 1 / 30);  // 限制最大步长（避免切到后台后大跳跃）
-    lastT = now;
-    t += dt;
+    if (paused) {
+      // 暂停时只刷新渲染、不推进时间
+      lastT = now;
+    } else {
+      const dt = Math.min((now - lastT) / 1000, 1 / 30);  // 限制最大步长（避免切到后台后大跳跃）
+      lastT = now;
+      t += dt;
+    }
 
     // 1) 背景
     ctx.fillStyle = '#1a1a24';
@@ -297,43 +323,33 @@
   // ============================================================
   //  UI 控件
   // ============================================================
+  // 滑块绑定：实时更新物理参数，不打断时间线（让球自然演化）
   function bindRange(id, valId, key, fmt) {
     const r = document.getElementById(id);
     const v = document.getElementById(valId);
     r.addEventListener('input', () => {
       const num = parseFloat(r.value);
-      if (key === 'theta0') physics.theta0 = num * Math.PI / 180;
-      else physics[key] = num;
+      physics[key] = num;
       v.textContent = fmt(num);
-      resetSim();
     });
   }
   bindRange('rL', 'valL', 'L', v => v.toFixed(0));
   bindRange('rG', 'valG', 'g', v => v.toFixed(1));
-  bindRange('rA', 'valA', 'theta0', v => v.toFixed(0));
-  bindRange('rD', 'valD', 'damping', v => v.toFixed(2));
+  bindRange('rD', 'valD', 'damping', v => v.toFixed(3));
 
-  document.getElementById('btnReset').addEventListener('click', resetSim);
+  // "重置摆动"：精准回到 45° 初始状态（t 归零 + 轨迹清空 + theta0 重置）
+  function resetSwing() {
+    physics.theta0 = 45 * Math.PI / 180;
+    t = 0;
+    trail = [];
+    lastT = performance.now();
+  }
+  document.getElementById('btnReset').addEventListener('click', resetSwing);
 
   // 空格键 = 暂停/继续（额外彩蛋）
-  let paused = false;
   window.addEventListener('keydown', e => {
     if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
   });
-  const origFrame = frame;
-  function wrappedFrame(now) {
-    if (!paused) {
-      // 暂停时不动 t
-      origFrame(now);
-    } else {
-      // 暂停时只重绘一帧，不推进时间
-      lastT = now;
-      requestAnimationFrame(wrappedFrame);
-    }
-  }
-  // 替换主循环
-  cancelAnimationFrame(0);
-  requestAnimationFrame(wrappedFrame);
 })();
 </script>
 </body>
