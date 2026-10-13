@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Week 05 · 调试演练场 · 03_buggy_practice · 欧阳雨彤 7902126140</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #1a1a24; color: #e6e6f0;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", monospace;
+    overflow: hidden;
+  }
+  .layout { display: flex; height: 100vh; }
+  .stage-side {
+    flex: 1; position: relative;
+    border-right: 1px solid rgba(120, 130, 200, 0.15);
+  }
+  .code-side {
+    width: 560px; min-width: 560px;
+    overflow-y: auto;
+    background: #14141d;
+    padding: 18px 20px;
+    box-sizing: border-box;
+  }
+  /* 顶部警告条 */
+  .warn {
+    position: absolute; top: 0; left: 0; right: 0;
+    background: linear-gradient(90deg, #5a2a2a 0%, #4a2a2a 100%);
+    border-bottom: 1px solid #8a3a3a;
+    padding: 8px 16px; font-size: 12px; color: #ffd0d0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .warn b { color: #ff8888; }
+  /* Canvas */
+  canvas#stage { display: block; margin-top: 28px; }
+  /* HUD 浮层 */
+  #hud {
+    position: absolute; top: 42px; left: 16px;
+    background: rgba(20, 20, 30, 0.7);
+    padding: 10px 14px; border-radius: 8px;
+    font-size: 12px; line-height: 1.7;
+    border: 1px solid rgba(120, 130, 200, 0.18);
+    pointer-events: none; max-width: 280px;
+  }
+  #hud b { color: #7fc8ff; }
+  #hud .odd { color: #ff8888; }  /* 异常指标 */
+  /* 控制条 */
+  #panel {
+    position: absolute; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 18px; align-items: center;
+    background: rgba(20, 20, 30, 0.65);
+    padding: 12px 18px; border-radius: 10px;
+    border: 1px solid rgba(120, 130, 200, 0.2);
+    backdrop-filter: blur(8px);
+  }
+  .ctrl { display: flex; flex-direction: column; gap: 3px; min-width: 165px; }
+  .ctrl-label { font-size: 9px; color: #8a8aa8; letter-spacing: 1.5px; text-transform: uppercase; }
+  .ctrl-row { display: flex; align-items: center; gap: 6px; }
+  #panel input[type=range] { width: 125px; accent-color: #7fc8ff; }
+  #panel .val { color: #7fc8ff; font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; font-size: 12px; font-weight: 600; }
+  #panel .unit { font-size: 9px; color: #6a6a85; }
+  #panel button {
+    padding: 7px 12px; background: #2a2a3a; color: #e6e6f0;
+    border: 1px solid #3a3a55; border-radius: 6px; cursor: pointer; font-size: 12px;
+  }
+  #panel button:hover { background: #353550; }
+  /* 代码面板 */
+  .code-side h2 { font-size: 14px; color: #ff8888; margin: 6px 0 12px; letter-spacing: 1px; }
+  .code-side h2 small { color: #888; font-size: 11px; margin-left: 8px; }
+  .bug-card {
+    background: #1e1e2e; border: 1px solid #3a2a2a;
+    border-left: 3px solid #ff5555;
+    border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;
+  }
+  .bug-card .bug-id { color: #ff8888; font-weight: bold; font-size: 12px; }
+  .bug-card .bug-title { color: #e6e6f0; font-size: 13px; margin: 2px 0 6px; }
+  .bug-card .bug-desc { color: #a0a0b8; font-size: 12px; line-height: 1.6; }
+  .bug-card .bug-hint {
+    margin-top: 6px; padding: 4px 8px;
+    background: #2a2a3a; border-radius: 4px;
+    font-size: 11px; color: #ffb060;
+  }
+  pre.source {
+    background: #0d0d15; border: 1px solid #2a2a3a;
+    border-radius: 6px; padding: 12px;
+    font-size: 11.5px; line-height: 1.55;
+    color: #c0c0d0; overflow-x: auto;
+    counter-reset: line;
+  }
+  pre.source .line {
+    display: block; padding-left: 30px; position: relative;
+  }
+  pre.source .line::before {
+    counter-increment: line;
+    content: counter(line);
+    position: absolute; left: 0; width: 24px; text-align: right;
+    color: #5a5a78; font-size: 10px;
+  }
+  pre.source .bug {
+    background: rgba(255, 85, 85, 0.12);
+    border-left: 2px solid #ff5555;
+    margin-left: -12px; padding-left: 10px;
+  }
+  pre.source .bug-tag {
+    color: #ff5555; font-weight: bold;
+  }
+  pre.source .kw { color: #c080ff; }
+  pre.source .fn { color: #7fc8ff; }
+  pre.source .str { color: #80d090; }
+  pre.source .num { color: #f0c060; }
+  pre.source .cm { color: #6a6a85; font-style: italic; }
+  pre.source .op { color: #d0a0d0; }
+  .toggle-answer {
+    margin-top: 16px; padding: 10px 14px;
+    background: #2a3a2a; border: 1px solid #3a5a3a; color: #a0d0a0;
+    border-radius: 6px; cursor: pointer; width: 100%; font-size: 12px;
+  }
+  .toggle-answer:hover { background: #354a35; }
+  #answer-box {
+    display: none; margin-top: 12px; padding: 12px;
+    background: #0d1a0d; border: 1px solid #3a5a3a;
+    border-radius: 6px; font-size: 12px; line-height: 1.7; color: #c0e0c0;
+  }
+  #answer-box.show { display: block; }
+  #answer-box b { color: #80ff80; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- 左侧：可视化舞台 -->
+  <div class="stage-side">
+    <div class="warn">🐛 <b>调试演练场</b>　本页面故意埋设 4 处 Bug　|　参考正确版本：<code>../index.html</code>　|　按 F12 打开控制台查看运行信息</div>
+    <canvas id="stage"></canvas>
+    <div id="hud">
+      <div>摆长 L = <b id="hudL">200</b> px　·　重力 g = <b id="hudG">9.8</b></div>
+      <div>θ₀ 初始角 = <b id="hudTheta0">45</b>°　·　实测 ω = <b id="hudW">—</b> rad/s</div>
+      <div>理论 ω = <b id="hudWth">—</b>　·　差异 = <b id="hudWdiff" class="odd">—</b></div>
+      <div>当前 θ = <b id="hudTheta">—</b>°　·　θ̇ = <b id="hudV">—</b></div>
+    </div>
+    <div id="panel">
+      <div class="ctrl">
+        <div class="ctrl-label">摆长 L</div>
+        <div class="ctrl-row">
+          <input type="range" id="rL" min="100" max="350" value="200">
+          <span class="val" id="valL">200</span><span class="unit">px</span>
+        </div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-label">重力 g</div>
+        <div class="ctrl-row">
+          <input type="range" id="rG" min="1" max="25" step="0.1" value="9.8">
+          <span class="val" id="valG">9.8</span><span class="unit">m/s²</span>
+        </div>
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-label">阻尼 γ</div>
+        <div class="ctrl-row">
+          <input type="range" id="rD" min="0" max="0.010" step="0.001" value="0">
+          <span class="val" id="valD">0.000</span>
+        </div>
+      </div>
+      <button id="btnReset">↻ 重置摆动 (45°)</button>
+    </div>
+  </div>
+
+  <!-- 右侧：Bug 描述 + 源码 -->
+  <div class="code-side">
+    <h2>🐞 本页 Bug 清单 <small>对照源码找出下述 4 处问题</small></h2>
+
+    <div class="bug-card">
+      <div class="bug-id">BUG #1 · 滑块绑定错位</div>
+      <div class="bug-title">"重力 g" 滑块实际改变了初始角 θ₀</div>
+      <div class="bug-desc">现象：你拖动 <code>g</code> 滑块时，<b>初始角 θ₀</b> 跟着变；真·重力 g 反而没动。<br>→ 观察右上角 HUD "θ₀ 初始角" 这一行的数值。</div>
+      <div class="bug-hint">💡 提示：<code>bindRange(...)</code> 的第三个参数（key）写错了</div>
+    </div>
+
+    <div class="bug-card">
+      <div class="bug-id">BUG #2 · 物理公式错误</div>
+      <div class="bug-title">阻尼被加到了角频率 ω 上，摆动反而变快</div>
+      <div class="bug-desc">现象：增大"阻尼 γ"后球<b>摆得更快</b>，而不是慢慢衰减。<br>→ 观察 HUD "实测 ω vs 理论 ω" 的差异。</div>
+      <div class="bug-hint">💡 提示：阻尼应当乘在指数项 e<sup>-γt</sup>，而不是和 ω 相加</div>
+    </div>
+
+    <div class="bug-card">
+      <div class="bug-id">BUG #3 · 重置函数不完整</div>
+      <div class="bug-title">"重置摆动"按钮没把 θ₀ 重置回 45°</div>
+      <div class="bug-desc">现象：先拖 g 滑块改变 θ₀（Bug#1 的副作用），再点"重置摆动"——球会从<b>上一次的 θ₀</b> 重新释放，而不是 45°。</div>
+      <div class="bug-hint">💡 提示：<code>resetSwing()</code> 漏了一行</div>
+    </div>
+
+    <div class="bug-card">
+      <div class="bug-id">BUG #4 · 轨迹颜色错位</div>
+      <div class="bug-title">运动轨迹整条一个颜色，没有渐变</div>
+      <div class="bug-desc">现象：球的轨迹线整条都是<b>同一个不透明的颜色</b>，没有"新→旧"的渐隐效果。</div>
+      <div class="bug-hint">💡 提示：<code>drawTrail()</code> 里循环变量 <code>i</code> 没被用上</div>
+    </div>
+
+    <h2>📄 源码（带 Bug 标记）</h2>
+<pre class="source">
+<span class="line"><span class="kw">const</span> physics = {</span>
+<span class="line">  L: <span class="num">200</span>, g: <span class="num">9.8</span>,</span>
+<span class="line">  theta0: <span class="num">45</span> * <span class="fn">Math</span>.PI / <span class="num">180</span>,</span>
+<span class="line">  damping: <span class="num">0</span></span>
+<span class="line">};</span>
+<span class="line"></span>
+<span class="line"><span class="kw">function</span> <span class="fn">theta</span>(t) {</span>
+<span class="line bug"><span class="bug-tag">// 🐛 BUG #2</span> 阻尼加到了频率而非指数</span>
+<span class="line bug">  <span class="kw">return</span> physics.theta0 * <span class="fn">Math</span>.<span class="fn">cos</span>((<span class="fn">omega</span>() + physics.damping) * t);</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="kw">function</span> <span class="fn">drawTrail</span>() {</span>
+<span class="line bug"><span class="bug-tag">// 🐛 BUG #4</span> 颜色没用渐变</span>
+<span class="line bug">  <span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">1</span>; i &lt; trail.length; i++) {</span>
+<span class="line bug">    ctx.strokeStyle = <span class="str">`rgba(127, 200, 255, 0.35)`</span>;</span>
+<span class="line bug">    ctx.lineWidth = <span class="num">1.5</span>;</span>
+<span class="line bug">    <span class="cm">// ❌ 缺少 a = i / trail.length 的渐变计算</span></span>
+<span class="line">  }</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="kw">function</span> <span class="fn">resetSwing</span>() {</span>
+<span class="line bug"><span class="bug-tag">// 🐛 BUG #3</span> 漏了一行：physics.theta0 = π/4</span>
+<span class="line bug">  t = <span class="num">0</span>;</span>
+<span class="line bug">  trail = [];</span>
+<span class="line bug">  lastT = <span class="fn">performance</span>.<span class="fn">now</span>();</span>
+<span class="line">}</span>
+<span class="line"></span>
+<span class="line"><span class="cm">// 滑块绑定</span></span>
+<span class="line bug"><span class="bug-tag">// 🐛 BUG #1</span> 第三个参数应是 'g' 不是 'theta0'</span>
+<span class="line bug"><span class="fn">bindRange</span>(<span class="str">'rG'</span>, <span class="str">'valG'</span>, <span class="str">'theta0'</span>, v =&gt; v.<span class="fn">toFixed</span>(<span class="num">1</span>));</span>
+</pre>
+
+    <button class="toggle-answer" id="btnAnswer">🔓 显示参考答案（修复后代码）</button>
+    <div id="answer-box">
+      <b>BUG #1</b>：把 <code>bindRange('rG', 'valG', 'theta0', ...)</code> 改为 <code>bindRange('rG', 'valG', 'g', ...)</code>。<br>
+      <b>BUG #2</b>：把 <code>Math.cos((omega() + damping) * t)</code> 改为 <code>Math.cos(omega() * t) * Math.exp(-damping * t)</code>。<br>
+      <b>BUG #3</b>：在 <code>resetSwing()</code> 开头加一行 <code>physics.theta0 = 45 * Math.PI / 180;</code>。<br>
+      <b>BUG #4</b>：在循环里加 <code>const a = i / trail.length;</code> 并把颜色改为 <code>rgba(127,200,255,${a*0.35})</code>、线宽改为 <code>1.5 * a</code>。
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, DPR = window.devicePixelRatio || 1;
+  function resize() {
+    W = canvas.parentElement.clientWidth;
+    H = canvas.parentElement.clientHeight;
+    canvas.width  = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ============================================================
+  //  ⚠️ 此区域包含故意设置的 4 处 Bug（详见右侧代码面板）
+  // ============================================================
+  const physics = {
+    L: 200, g: 9.8,
+    theta0: 45 * Math.PI / 180,
+    damping: 0
+  };
+  const PX_PER_M = 100;
+  const omega = () => Math.sqrt(physics.g * PX_PER_M / physics.L);
+  let t = 0, lastT = performance.now(), trail = [];
+  const MAX_TRAIL = 240;
+  let paused = false;
+
+  // 🐛 BUG #2: 阻尼被错误地加到了角频率
+  function theta(t) {
+    return physics.theta0 * Math.cos((omega() + physics.damping) * t);
+  }
+  function thetaDot(t) {
+    return -physics.theta0 * Math.sin((omega() + physics.damping) * t) * (omega() + physics.damping);
+  }
+
+  // 渲染辅助
+  function drawGrid() {
+    ctx.strokeStyle = 'rgba(120, 130, 200, 0.05)';
+    ctx.lineWidth = 1;
+    const step = 40;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+  function drawPivot(px, py) {
+    ctx.fillStyle = '#2a2a3a'; ctx.strokeStyle = '#5a5a78'; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3 + Math.PI / 6;
+      i === 0 ? ctx.moveTo(px + 10*Math.cos(a), py + 10*Math.sin(a))
+              : ctx.lineTo(px + 10*Math.cos(a), py + 10*Math.sin(a));
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+  function drawRod(x1,y1,x2,y2) {
+    const g = ctx.createLinearGradient(x1,y1,x2,y2);
+    g.addColorStop(0,'#4a4a66'); g.addColorStop(0.5,'#8a8aa8'); g.addColorStop(1,'#4a4a66');
+    ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+  function drawBallWithGlow(x,y,r) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 4; i >= 1; i--) {
+      const rad = r + i * 8;
+      const gr = ctx.createRadialGradient(x,y,r*0.4,x,y,rad);
+      gr.addColorStop(0, `rgba(127,200,255,${0.18 - i*0.03})`);
+      gr.addColorStop(1, 'rgba(127,200,255,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+    const body = ctx.createRadialGradient(x-r*0.35,y-r*0.35,r*0.1,x,y,r);
+    body.addColorStop(0,'#d8eaff'); body.addColorStop(0.4,'#7fc8ff'); body.addColorStop(1,'#2a5a8a');
+    ctx.fillStyle = body; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+
+  // 🐛 BUG #4: 轨迹颜色没用渐变
+  function drawTrail() {
+    if (trail.length < 2) return;
+    for (let i = 1; i < trail.length; i++) {
+      ctx.strokeStyle = `rgba(127, 200, 255, 0.35)`;  // 整条一个颜色
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(trail[i-1].x, trail[i-1].y);
+      ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+    }
+  }
+
+  // 主循环
+  function frame(now) {
+    if (paused) { lastT = now; }
+    else {
+      const dt = Math.min((now - lastT) / 1000, 1/30);
+      lastT = now; t += dt;
+    }
+    ctx.fillStyle = '#1a1a24';
+    ctx.fillRect(0, 0, W, H);
+    drawGrid();
+    const px = W / 2, py = H * 0.3;
+    const th = theta(t);
+    const bx = px + physics.L * Math.sin(th);
+    const by = py + physics.L * Math.cos(th);
+    const ballR = Math.max(10, Math.min(22, physics.L * 0.08));
+    trail.push({ x: bx, y: by });
+    if (trail.length > MAX_TRAIL) trail.shift();
+    drawTrail();
+    drawRod(px, py, bx, by);
+    drawPivot(px, py);
+    drawBallWithGlow(bx, by, ballR);
+
+    // HUD（额外加了"实测 vs 理论"差异指标，让 Bug #2 一眼可见）
+    const wTheo = omega();
+    const wActual = omega() + physics.damping;  // 受 Bug #2 影响：实测 = 理论 + 阻尼
+    const wDiff = wActual - wTheo;
+    document.getElementById('hudT') && (document.getElementById('hudL').textContent = physics.L.toFixed(0));
+    document.getElementById('hudG').textContent = physics.g.toFixed(1);
+    document.getElementById('hudTheta0').textContent = (physics.theta0 * 180 / Math.PI).toFixed(1);
+    document.getElementById('hudW').textContent = wActual.toFixed(3);
+    document.getElementById('hudWth').textContent = wTheo.toFixed(3);
+    const diffEl = document.getElementById('hudWdiff');
+    diffEl.textContent = (wDiff >= 0 ? '+' : '') + wDiff.toFixed(3);
+    diffEl.style.color = Math.abs(wDiff) > 0.001 ? '#ff8888' : '#7fc8ff';
+    document.getElementById('hudTheta').textContent = (th * 180 / Math.PI).toFixed(1);
+    document.getElementById('hudV').textContent = thetaDot(t).toFixed(2);
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // UI 控件
+  function bindRange(id, valId, key, fmt) {
+    const r = document.getElementById(id);
+    const v = document.getElementById(valId);
+    r.addEventListener('input', () => {
+      const num = parseFloat(r.value);
+      physics[key] = num;
+      v.textContent = fmt(num);
+    });
+  }
+  bindRange('rL', 'valL', 'L', v => v.toFixed(0));
+  // 🐛 BUG #1: g 滑块错绑到 theta0
+  bindRange('rG', 'valG', 'theta0', v => v.toFixed(1));
+  bindRange('rD', 'valD', 'damping', v => v.toFixed(3));
+
+  // 🐛 BUG #3: 漏了把 theta0 重置回 45°
+  function resetSwing() {
+    t = 0;
+    trail = [];
+    lastT = performance.now();
+  }
+  document.getElementById('btnReset').addEventListener('click', resetSwing);
+
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
+  });
+
+  // 答案折叠
+  document.getElementById('btnAnswer').addEventListener('click', () => {
+    document.getElementById('answer-box').classList.toggle('show');
+  });
+
+  console.log('🐛 调试演练场已加载。本页面故意埋设 4 处 Bug，请打开右侧代码面板对照找出。');
+})();
+</script>
+</body>
+</html>
